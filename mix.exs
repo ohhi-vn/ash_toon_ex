@@ -2,9 +2,9 @@ defmodule AshToonEx.MixProject do
   use Mix.Project
 
   @name :ash_toon_ex
-  @version "0.1.0"
+  @version "0.1.1"
   @description "Ash extension for implementing ToonEx.Encoder protocol"
-  @github_url "https://github.com/manhvu/ash_toon_ex"
+  @github_url "https://github.com/ohhi-vn/ash_toon_ex"
 
   def project do
     [
@@ -16,14 +16,14 @@ defmodule AshToonEx.MixProject do
       package: package(),
       deps: deps(),
       docs: &docs/0,
-      aliases: aliases()
+      aliases: aliases(),
     ]
   end
 
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger]
+      extra_applications: [:logger],
     ]
   end
 
@@ -33,7 +33,7 @@ defmodule AshToonEx.MixProject do
       description: @description,
       licenses: ["MIT"],
       links: %{Github: @github_url},
-      files: ~w(mix.exs lib .formatter.exs LICENSE.md  README.md)
+      files: ~w(mix.exs lib .formatter.exs LICENSE.md  README.md),
     ]
   end
 
@@ -48,7 +48,7 @@ defmodule AshToonEx.MixProject do
       {:sourceror, "~> 1.7", only: [:dev, :test], runtime: false},
       {:freedom_formatter, "~> 2.1", only: [:dev, :test], runtime: false},
       {:ex_check, "~> 0.16.0", only: [:dev, :test], runtime: false},
-      {:toon_ex, "~> 0.8"}
+      {:toon_ex, "~> 0.8"},
     ]
   end
 
@@ -63,25 +63,24 @@ defmodule AshToonEx.MixProject do
         "LICENSE.md": [title: "License"],
         "documentation/dsls/DSL-AshToonEx.Resource.md": [
           title: "DSL: AshToonEx.Resource",
-          search_data: Spark.Docs.search_data_for(AshToonEx.Resource)
+          search_data: Spark.Docs.search_data_for(AshToonEx.Resource),
         ],
         "documentation/dsls/DSL-AshToonEx.TypedStruct.md": [
           title: "DSL: AshToonEx.TypedStruct",
-          search_data: Spark.Docs.search_data_for(AshToonEx.TypedStruct)
-        ]
-      ]
+          search_data: Spark.Docs.search_data_for(AshToonEx.TypedStruct),
+        ],
+      ],
     ]
   end
 
   defp aliases() do
     [
       docs: ["spark.cheat_sheets", "docs", "spark.replace_doc_links"],
-      "spark.cheat_sheets":
-        "spark.cheat_sheets --extensions AshToonEx.Resource,AshToonEx.TypedStruct",
+      "spark.cheat_sheets": "spark.cheat_sheets --extensions AshToonEx.Resource,AshToonEx.TypedStruct",
       "spark.formatter": [
         "spark.formatter --extensions AshToonEx.Resource,AshToonEx.TypedStruct",
-        "format .formatter.exs"
-      ]
+        "format .formatter.exs",
+      ],
     ]
   end
 end
