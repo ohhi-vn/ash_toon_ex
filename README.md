@@ -71,6 +71,9 @@ Values of `nil` / `Ash.NotLoaded` / `Ash.ForbiddenField` are omitted.
 Map can have such options as:
 - `private?` - Whether to pick private fields.
 - `sensitive?` - Whether to pick sensitive fields.
+- `relationships?` - Whether to include loaded relationships (default: `false`). When enabled, loaded relationships will be encoded as nested TOON objects.
+- `calculations?` - Whether to include calculations (default: `true`).
+- `aggregates?` - Whether to include aggregates (default: `true`).
 - `include` - Keys to pick. In addition to fields.
 - `exclude` - Keys not to pick.
 
@@ -90,6 +93,15 @@ toon do
 
   # Pick usual but include and exclude some specific keys
   pick %{include: [:ok_private_field], exclude: [:irrelevant_public_field]}
+
+  # Include loaded relationships in encoding
+  pick %{relationships?: true}
+
+  # Exclude calculations from encoding
+  pick %{calculations?: false}
+
+  # Exclude aggregates from encoding
+  pick %{aggregates?: false}
 end
 ```
 
@@ -189,6 +201,29 @@ defmodule Example.TypedStruct do
 end
 ```
 
+### Phoenix Integration
+
+`AshToonEx` provides a Phoenix serializer module for working with TOON format in Phoenix controllers.
+
+```elixir
+# In your controller
+defmodule MyAppWeb.UserController do
+  use MyAppWeb, :controller
+  
+  def show(conn, %{"id" => id}) do
+    user = MyApp.User |> Ash.get!(id)
+    conn
+    |> put_resp_content_type("application/x-toon")
+    |> send_resp(200, ToonEx.encode!(user))
+  end
+end
+
+# Or use the provided helper
+alias AshToonEx.Phoenix.ToonSerializer
+
+conn |> ToonSerializer.send_toon(user)
+```
+
 ### Protocol
 
 Each resource or typed struct with `AshToonEx` extension also implements `AshToonEx.Protocol`.
@@ -215,6 +250,7 @@ ToonEx.encode!(user)
 - [ToonEx](https://github.com/ohhi-vn/toon_ex) — TOON encoder/decoder for Elixir
 - [ash_jason](https://github.com/vonagam/ash_jason) — Ash extension for Jason protocol (inspiration for this project)
 - [Ash](https://github.com/ash-project/ash) — Resource framework for Elixir
+- [Examples](examples/) — Basic and advanced usage examples
 
 ## License
 

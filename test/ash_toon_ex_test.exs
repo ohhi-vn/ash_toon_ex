@@ -299,7 +299,7 @@ defmodule AshToonEx.Test do
       # Note: `order` with a list acts as a filter (keeping only listed keys that exist),
       # but the final TOON output is sorted alphabetically by the Map encoder.
       assert encode!(%WithOrderList{id: @id, i: 1, j: 1, k: 1, x: 1, y: 1, z: 1}) ==
-               "id: #{@id}\ni: 1\nk: 1\nx: 1\nz: 1"
+               "i: 1\nid: #{@id}\nk: 1\nx: 1\nz: 1"
     end
   end
 
@@ -377,7 +377,7 @@ defmodule AshToonEx.Test do
       # (i was removed by compact since it is nil)
       # The Map encoder sorts alphabetically (byte-wise).
       assert encode!(%StructWithAll{id: @id, j: 1, k: 2}) ==
-               "\"@type\": survey\nid: #{@id}\nk: 2\n\"✅\": 1\n❌: 10"
+               "\"@type\": survey\nid: #{@id}\nk: 2\n\"✅\": 1\n\"❌\": 10"
     end
   end
 
@@ -391,6 +391,477 @@ defmodule AshToonEx.Test do
 
     test "works" do
       assert AshToonEx.Protocol.get_fields(%WithProtocol{id: @id, j: 1, k: 2}) == [id: @id, p: 1, k: 2]
+    end
+  end
+
+  describe "fragment support" do
+    defresource WithFragment do
+      toon do
+        compact true
+
+        customize fn result, _record ->
+          # Create a fragment manually (simulating pre-encoded TOON)
+          fragment = %ToonEx.Fragment{encode: fn _opts -> "embedded: value" end}
+          List.keystore(result, :embedded, 0, {:embedded, fragment})
+        end
+      end
+    end
+
+    test "encodes ToonEx.Fragment in customize step" do
+      # The fragment should be encoded as part of the TOON output
+      encoded = encode!(%WithFragment{id: @id, k: 1})
+      assert encoded =~ "embedded: value"
+      assert encoded =~ "id: #{@id}"
+    end
+  end
+
+  describe "pick options for relationships, calculations, aggregates" do
+    defresource WithRelationshipsPick do
+      toon do
+        compact true
+        pick %{relationships?: true}
+      end
+    end
+
+    test "accepts relationships? option" do
+      # Just ensure it doesn't error during compilation and works
+      # relationships? option is accepted and doesn't break encoding
+      encoded = encode!(%WithRelationshipsPick{id: @id, k: 1})
+      assert encoded =~ "id: #{@id}"
+      assert encoded =~ "k: 1"
+    end
+
+    defresource WithoutCalculations do
+      toon do
+        compact true
+        pick %{calculations?: false}
+      end
+    end
+
+    test "accepts calculations? option" do
+      encoded = encode!(%WithoutCalculations{id: @id, k: 1})
+      assert encoded =~ "id: #{@id}"
+      assert encoded =~ "k: 1"
+    end
+
+    defresource WithoutAggregates do
+      toon do
+        compact true
+        pick %{aggregates?: false}
+      end
+    end
+
+    test "accepts aggregates? option" do
+      encoded = encode!(%WithoutAggregates{id: @id, k: 1})
+      assert encoded =~ "id: #{@id}"
+      assert encoded =~ "k: 1"
+    end
+  end
+
+  describe "edge cases" do
+    defresource WithEmptyOrder do
+      toon do
+        compact true
+        order []
+      end
+    end
+
+    test "order with empty list returns empty result" do
+      assert encode!(%WithEmptyOrder{id: @id, k: 1}) == ""
+    end
+
+    defresource WithDuplicateMerge do
+      toon do
+        compact true
+        merge %{a: 1}
+        merge %{a: 2}
+      end
+    end
+
+    test "merge overwrites previous values" do
+      result = encode!(%WithDuplicateMerge{id: @id})
+      # The last merge should win
+      assert result =~ "a: 2"
+    end
+
+    defresource WithNilInCustomize do
+      toon do
+        compact false
+
+        customize fn result, _record ->
+          List.keystore(result, :maybe_nil, 0, {:maybe_nil, nil})
+        end
+      end
+    end
+
+    test "handles nil values from customize" do
+      encoded = encode!(%WithNilInCustomize{id: @id})
+      # nil values are kept because compact is false
+      assert encoded =~ "maybe_nil: null"
+    end
+  end
+
+  describe "compact edge cases" do
+    defresource WithCompactEmptyValues do
+      toon do
+        compact %{values: []}
+      end
+    end
+
+    test "compact with empty values list removes nothing" do
+      assert encode!(%WithCompactEmptyValues{id: @id, k: 1}) == "b: null\ni: null\nid: #{@id}\nj: null\nk: 1"
+    end
+
+    defresource WithCompactOnlyEmptyList do
+      toon do
+        compact %{fields: {:only, []}}
+      end
+    end
+
+    test "compact with only empty list checks nothing" do
+      assert encode!(%WithCompactOnlyEmptyList{id: @id, k: 1}) == "b: null\ni: null\nid: #{@id}\nj: null\nk: 1"
+    end
+  end
+
+  if Code.ensure_loaded?(Plug.Conn) do
+    describe "Phoenix serializer" do
+      test "encode returns TOON string" do
+        assert AshToonEx.Phoenix.ToonSerializer.encode(%{name: "Alice", age: 30}) ==
+                 "age: 30\nname: Alice"
+      end
+
+      test "decode returns map" do
+        assert AshToonEx.Phoenix.ToonSerializer.decode("name: Alice\nage: 30") ==
+                 %{"name" => "Alice", "age" => 30}
+      end
+    end
+  end
+
+  describe "multiple steps combined" do
+    defresource WithMultipleSteps do
+      toon do
+        pick [:id, :i, :j, :k]
+        compact true
+        rename i: "I"
+        merge %{type: "resource"}
+        order [:type, "I", :j, :k, :id]
+      end
+    end
+
+    test "applies all steps in order" do
+      encoded = encode!(%WithMultipleSteps{id: @id, i: 10, j: 20, k: 30})
+      # Map encoder sorts alphabetically, so "I" comes before id
+      assert encoded == "I: 10\nid: #{@id}\nj: 20\nk: 30\ntype: resource"
+    end
+  end
+
+  describe "rename edge cases" do
+    defresource WithRenameToExisting do
+      toon do
+        compact true
+        rename i: :j
+      end
+    end
+
+    test "rename adds new key without removing old" do
+      # When renaming i to j, both keys exist (i gets renamed to j, but j already exists)
+      # Actually, rename changes the key name, so i becomes j
+      # If j already exists, we'll have duplicate j keys - Map.new takes the last one
+      encoded = encode!(%WithRenameToExisting{id: @id, i: 1, j: 2})
+      # The result should contain j with value 1 (from i being renamed)
+      # But since Map.new is used, it depends on the order
+      assert encoded =~ "j: "
+      assert encoded =~ "id: #{@id}"
+    end
+  end
+
+  describe "customize edge cases" do
+    defresource WithCustomizeRemoveAll do
+      toon do
+        customize fn _result, _record ->
+          []
+        end
+      end
+    end
+
+    test "customize can return empty list" do
+      assert encode!(%WithCustomizeRemoveAll{id: @id, k: 1}) == ""
+    end
+
+    defresource WithCustomizeAddComplex do
+      toon do
+        compact true
+
+        customize fn result, _record ->
+          result
+          |> List.keystore(:nested, 0, {:nested, %{a: 1, b: 2}})
+          |> List.keystore(:list, 0, {:list, [1, 2, 3]})
+        end
+      end
+    end
+
+    test "customize can add complex values" do
+      encoded = encode!(%WithCustomizeAddComplex{id: @id, k: 1})
+      assert encoded =~ "id: #{@id}"
+      assert encoded =~ "k: 1"
+      # Nested map and list should be encoded
+      assert encoded =~ "nested:"
+      assert encoded =~ "a: 1"
+      # List is encoded as "list[3]: 1,2,3" in TOON
+      assert encoded =~ "list["
+      assert encoded =~ "1,2,3"
+    end
+  end
+
+  describe "pick with all options combined" do
+    defresource WithAllPickOptions do
+      toon do
+        compact true
+        pick %{private?: true, sensitive?: true, include: [:i], exclude: [:x], relationships?: false}
+      end
+    end
+
+    test "respects all pick options" do
+      # Should include private (x), sensitive (y, z), and i (included)
+      # But exclude x (from exclude)
+      encoded = encode!(%WithAllPickOptions{id: @id, x: 1, y: 2, z: 3, i: 4})
+      assert encoded =~ "id: #{@id}"
+      # x should be excluded
+      refute encoded =~ "x: 1"
+      # y and z should be included (sensitive)
+      assert encoded =~ "y: 2"
+      assert encoded =~ "z: 3"
+      # i should be included (from include)
+      assert encoded =~ "i: 4"
+    end
+  end
+
+  describe "protocol with various configurations" do
+    defresource ProtocolWithAllSteps do
+      toon do
+        pick [:id, :k]
+        compact true
+        rename k: :key
+        merge %{meta: true}
+      end
+    end
+
+    test "protocol returns correct fields after all steps" do
+      fields = AshToonEx.Protocol.get_fields(%ProtocolWithAllSteps{id: @id, k: 42})
+      assert fields == [id: @id, key: 42, meta: true]
+    end
+  end
+
+  describe "compact with various configurations" do
+    defresource WithCompactNilOnly do
+      toon do
+        compact %{values: [nil]}
+      end
+    end
+
+    test "compact removes only nil values" do
+      encoded = encode!(%WithCompactNilOnly{id: @id, i: 1, j: nil, k: 2})
+      assert encoded =~ "i: 1"
+      assert encoded =~ "k: 2"
+      refute encoded =~ "j: "
+    end
+
+    defresource WithCompactExceptAll do
+      toon do
+        compact %{fields: {:except, [:id, :i, :j, :k, :b]}}
+      end
+    end
+
+    test "compact except with all fields still keeps nothing" do
+      encoded = encode!(%WithCompactExceptAll{id: @id, i: 1})
+      # All fields are in except list, so nothing is compacted
+      assert encoded =~ "i: 1"
+      assert encoded =~ "id: #{@id}"
+    end
+  end
+
+  describe "order edge cases" do
+    defresource WithOrderFalse do
+      toon do
+        order false
+      end
+    end
+
+    test "order false does nothing" do
+      encoded = encode!(%WithOrderFalse{id: @id, i: 1, k: 2})
+      # Default alphabetical order from Map encoder, all fields included
+      assert encoded == "b: null\ni: 1\nid: #{@id}\nj: null\nk: 2"
+    end
+  end
+
+  describe "merge with various data types" do
+    defresource WithMergeList do
+      toon do
+        compact true
+        merge [a: 1, b: 2]
+      end
+    end
+
+    test "merge with keyword list" do
+      encoded = encode!(%WithMergeList{id: @id})
+      assert encoded =~ "a: 1"
+      assert encoded =~ "b: 2"
+    end
+
+    defresource WithMergeComplex do
+      toon do
+        compact true
+        merge %{nested: %{x: 1}, list: [1, 2, 3]}
+      end
+    end
+
+    test "merge with complex values" do
+      encoded = encode!(%WithMergeComplex{id: @id})
+      assert encoded =~ "nested:"
+      assert encoded =~ "list["
+    end
+  end
+
+  describe "rename with function" do
+    defresource WithRenameFunctionAdvanced do
+      toon do
+        compact true
+        rename fn name ->
+          name
+          |> to_string()
+          |> String.upcase()
+          |> String.to_atom()
+        end
+      end
+    end
+
+    test "rename with function converts keys" do
+      encoded = encode!(%WithRenameFunctionAdvanced{id: @id, i: 1, k: 2})
+      # Keys should be uppercased
+      assert encoded =~ "ID: #{@id}"
+      assert encoded =~ "I: 1"
+      assert encoded =~ "K: 2"
+    end
+  end
+
+  describe "protocol edge cases" do
+    defresource ProtocolEmpty do
+      toon do
+        pick []
+      end
+    end
+
+    test "protocol with empty pick returns empty list" do
+      assert AshToonEx.Protocol.get_fields(%ProtocolEmpty{id: @id, k: 1}) == []
+    end
+
+    defresource ProtocolWithCustomize do
+      toon do
+        customize fn result, _record ->
+          List.keystore(result, :added, 0, {:added, true})
+        end
+      end
+    end
+
+    test "protocol includes customize changes" do
+      fields = AshToonEx.Protocol.get_fields(%ProtocolWithCustomize{id: @id, k: 1})
+      assert Keyword.get(fields, :added) == true
+    end
+  end
+
+  describe "encoding edge cases" do
+    defresource WithOnlySensitive do
+      toon do
+        pick %{sensitive?: true}
+        compact true
+      end
+    end
+
+    test "encodes sensitive fields when specified" do
+      # sensitive?: true includes sensitive fields AND regular fields
+      resource = %WithOnlySensitive{id: @id, y: 1, k: 3}
+      encoded = encode!(resource)
+      assert encoded =~ "y: 1"
+      assert encoded =~ "k: 3"
+    end
+
+    defresource WithOnlyPrivate do
+      toon do
+        pick %{private?: true}
+        compact true
+      end
+    end
+
+    test "encodes private fields when specified" do
+      # private?: true includes private fields AND regular fields
+      encoded = encode!(%WithOnlyPrivate{id: @id, x: 1, k: 2})
+      assert encoded =~ "x: 1"
+      assert encoded =~ "k: 2"
+    end
+  end
+
+  describe "all DSL entities coverage" do
+    defresource WithAllEntities do
+      toon do
+        pick [:id, :k]
+        compact true
+        merge %{added: "yes"}
+        rename k: :key
+        order [:key, :id, :added]
+        customize fn result, _record ->
+          List.keystore(result, :custom, 0, {:custom, true})
+        end
+      end
+    end
+
+    test "all entities work together" do
+      encoded = encode!(%WithAllEntities{id: @id, k: 42})
+      assert encoded =~ "key: 42"
+      assert encoded =~ "id: #{@id}"
+      assert encoded =~ "added: yes"
+      assert encoded =~ "custom: true"
+    end
+  end
+
+  describe "compact with all options" do
+    defresource WithCompactFull do
+      toon do
+        compact %{values: [nil, ""], fields: {:except, [:k]}}
+      end
+    end
+
+    test "compact with values and except fields" do
+      encoded = encode!(%WithCompactFull{id: @id, i: nil, j: "", k: 1})
+      # i (nil) and j ("") should be removed, k should be kept (except list)
+      refute encoded =~ "i: "
+      refute encoded =~ "j: "
+      assert encoded =~ "k: 1"
+    end
+  end
+
+  describe "AshToonEx module" do
+    test "version returns version string" do
+      version = AshToonEx.version()
+      assert is_binary(version)
+      assert version =~ "."
+    end
+  end
+
+  describe "Phoenix serializer" do
+    test "encode returns TOON string" do
+      result = AshToonEx.Phoenix.ToonSerializer.encode(%{name: "Alice", age: 30})
+      assert result == "age: 30\nname: Alice"
+    end
+
+    test "decode returns map" do
+      result = AshToonEx.Phoenix.ToonSerializer.decode("name: Alice\nage: 30")
+      assert result == %{"name" => "Alice", "age" => 30}
+    end
+
+    test "encode handles nested structures" do
+      result = AshToonEx.Phoenix.ToonSerializer.encode(%{user: %{name: "Bob"}})
+      assert result =~ "user:"
+      assert result =~ "name: Bob"
     end
   end
 end

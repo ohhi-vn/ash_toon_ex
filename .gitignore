@@ -23,3 +23,5 @@ erl_crash.dump
 ash_toon_ex-*.tar
 
 .expert
+.dexter.db*
+.DS_Store

@@ -50,7 +50,8 @@ defmodule AshToonEx.TransformerHelpers do
 
         options when is_map(options) ->
           fields = get_fields.(dsl, options)
-          keys = Enum.map(fields, & &1.name)
+          # Extract field names, handling different field types (attributes, relationships, calculations, aggregates)
+          keys = Enum.map(fields, &get_field_name/1)
           keys = keys ++ Map.get(options, :include, [])
           keys = Enum.uniq(keys)
           keys = keys -- Map.get(options, :exclude, [])
@@ -63,8 +64,32 @@ defmodule AshToonEx.TransformerHelpers do
             {:ok, value} = {:ok, Map.get(record, key)},
             not is_struct(value, Ash.NotLoaded),
             not is_struct(value, Ash.ForbiddenField) do
-          {key, value}
+          # Handle relationships specially - encode them if they are loaded
+          {key, normalized_value} =
+            cond do
+              is_struct(value, ToonEx.Fragment) ->
+                # ToonEx.Fragment - keep as-is for later encoding
+                {key, value}
+
+              is_list(value) and value != [] and is_struct(hd(value)) ->
+                # Likely a has_many relationship - encode each item
+                {key, Enum.map(value, &ToonEx.encode!/1)}
+
+              true ->
+                {key, value}
+            end
+
+          {key, normalized_value}
         end
+    end
+  end
+
+  defp get_field_name(field) do
+    # Handle different field types - they might have different structures
+    case field do
+      %{name: name} -> name
+      %{field: field_name} -> field_name
+      _ -> nil
     end
   end
 
@@ -172,6 +197,7 @@ defmodule AshToonEx.TransformerHelpers do
 
   defp make_step(:order, keys) when is_list(keys) do
     quote bind_quoted: [keys: Macro.escape(keys)] do
+      # Filter result to only include keys in the specified order
       result = for key <- keys, tuple = List.keyfind(result, key, 0), do: tuple
     end
   end
@@ -179,6 +205,16 @@ defmodule AshToonEx.TransformerHelpers do
   defp make_step(:customize, fun) do
     quote bind_quoted: [fun: Macro.escape(fun)] do
       result = fun.(result, record)
+
+      # Convert any ToonEx.Fragment in the result to their encoded form
+      result =
+        Enum.map(result, fn {key, value} ->
+          if match?(%ToonEx.Fragment{}, value) do
+            {key, value.encode.([]) |> IO.iodata_to_binary()}
+          else
+            {key, value}
+          end
+        end)
     end
   end
 end

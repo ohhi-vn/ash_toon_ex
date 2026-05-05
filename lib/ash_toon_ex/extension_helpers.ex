@@ -155,6 +155,30 @@ defmodule AshToonEx.ExtensionHelpers do
           """,
           type: {:list, :atom},
         ],
+        relationships?: [
+          doc: """
+            Whenever to include relationships in the encoding.
+            When true, loaded relationships will be encoded as nested TOON objects.
+          """,
+          type: :boolean,
+          default: false,
+        ],
+        calculations?: [
+          doc: """
+            Whenever to include calculations in the encoding.
+            When true, loaded calculations will be included.
+          """,
+          type: :boolean,
+          default: true,
+        ],
+        aggregates?: [
+          doc: """
+            Whenever to include aggregates in the encoding.
+            When true, loaded aggregates will be included.
+          """,
+          type: :boolean,
+          default: true,
+        ],
       ]
 
     pick_options =

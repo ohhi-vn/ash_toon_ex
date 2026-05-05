@@ -2,7 +2,7 @@ defmodule AshToonEx.MixProject do
   use Mix.Project
 
   @name :ash_toon_ex
-  @version "0.1.1"
+  @version "0.2.0"
   @description "Ash extension for implementing ToonEx.Encoder protocol"
   @github_url "https://github.com/ohhi-vn/ash_toon_ex"
 
@@ -17,6 +17,7 @@ defmodule AshToonEx.MixProject do
       deps: deps(),
       docs: &docs/0,
       aliases: aliases(),
+      test_coverage: [ignore_modules: [AshToonEx.ExtensionHelpers]]
     ]
   end
 
@@ -40,15 +41,17 @@ defmodule AshToonEx.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:ash, "~> 3.0 and >= 3.6.2"},
-      {:spark, ">= 2.1.21 and < 3.0.0"},
-      {:igniter, "~> 0.5", only: [:dev, :test], runtime: false},
-      {:ex_doc, "~> 0.32", only: :dev, runtime: false},
+      {:ash, ash_version("~> 3.24")},
+      {:spark, "~> 2.7"},
+      {:igniter, "~> 0.7", only: [:dev, :test], runtime: false},
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:sourceror, "~> 1.7", only: [:dev, :test], runtime: false},
       {:freedom_formatter, "~> 2.1", only: [:dev, :test], runtime: false},
       {:ex_check, "~> 0.16.0", only: [:dev, :test], runtime: false},
-      {:toon_ex, "~> 0.8"},
+      {:toon_ex, "~> 1.1"},
+      # Test dependencies
+      {:excoveralls, "~> 0.18", only: :test},
     ]
   end
 
@@ -71,6 +74,15 @@ defmodule AshToonEx.MixProject do
         ],
       ],
     ]
+  end
+
+  defp ash_version(default_version) do
+    case System.get_env("ASH_VERSION") do
+      nil -> default_version
+      "local" -> [path: "../ash"]
+      "main" -> [git: "https://github.com/ash-project/ash.git"]
+      version -> "~> #{version}"
+    end
   end
 
   defp aliases() do

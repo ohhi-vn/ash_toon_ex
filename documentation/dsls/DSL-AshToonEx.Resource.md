@@ -25,7 +25,7 @@ Configuration for ToonEx encoder implementation.
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`pick`](#toon-pick){: #toon-pick } | `list(atom) \| %{optional(:private?) => boolean, optional(:sensitive?) => boolean, optional(:include) => list(atom), optional(:exclude) => list(atom)}` |  | Keys to pick from a record into a result. Accepts an explicit names list or a behaviour configuration map. |
+| [`pick`](#toon-pick){: #toon-pick } | `list(atom) \| %{optional(:private?) => boolean, optional(:sensitive?) => boolean, optional(:include) => list(atom), optional(:exclude) => list(atom), optional(:relationships?) => boolean, optional(:calculations?) => boolean, optional(:aggregates?) => boolean}` |  | Keys to pick from a record into a result. Accepts an explicit names list or a behaviour configuration map. |
 
 
 
